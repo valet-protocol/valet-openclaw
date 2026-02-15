@@ -43,36 +43,53 @@ This will:
 
 Once installed, VALET authentication is **automatic** for all your agent's requests to VALET-enabled services.
 
-### Check Status
+### CLI Commands
 
+Check status:
 ```bash
-openclaw valet status
+valet status
 ```
 
 Output:
 ```
-✓ IPFS daemon running
-✓ Agent: agent:ed25519:5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty
-✓ Delegation: QmYwAPJzv5CZsnA636s8Bv...
-✓ Expires: 2026-02-15T08:00:00Z (23h 45m remaining)
-✓ Violations: 0
+VALET Status:
+─────────────
+✓ Agent key: ~/.valet/agent-key.pem
+  Agent ID: agent:ed25519:5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty
+✓ Principal key: ~/.valet/principal-key.pem
+  Principal ID: ed25519:ABC123...
+✓ Delegation: bafyrei... (23h 45m remaining)
+  Activity records: 3 flushed
 ```
 
-### Manual Delegation Management
-
-Create a new delegation:
+Create a new delegation (generates keys on first run):
 ```bash
-openclaw valet create-delegation
+valet create-delegation [-d <hours>]
+```
+
+View current delegation details:
+```bash
+valet show
 ```
 
 Revoke current delegation:
 ```bash
-openclaw valet revoke
+valet revoke
 ```
 
-View delegation details:
+View activity summary for current period:
 ```bash
-openclaw valet show-delegation
+valet activity [--cid <cid>]
+```
+
+Review activity and renew delegation:
+```bash
+valet renew [--activity-cid <cid>] [-d <hours>]
+```
+
+Show configuration:
+```bash
+valet config
 ```
 
 ## How It Works

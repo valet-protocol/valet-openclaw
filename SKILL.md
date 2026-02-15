@@ -62,16 +62,16 @@ Signature-Input: valet=("@method" "@path" "valet-authorization");created=1708077
 Signature: valet=:base64_signature:
 ```
 
-### Manual Commands
+### CLI Commands
 
 Check delegation status:
 ```bash
 valet status
 ```
 
-Create new delegation:
+Create new delegation (generates keys on first run):
 ```bash
-valet create-delegation
+valet create-delegation [-d <hours>]
 ```
 
 View current delegation:
@@ -84,14 +84,19 @@ Revoke delegation:
 valet revoke
 ```
 
-Review activity before renewing delegation:
+Review activity and renew delegation:
 ```bash
-valet renew --activity-cid <cid>
+valet renew [--activity-cid <cid>] [-d <hours>]
 ```
 
-View activity summary on its own:
+View activity summary:
 ```bash
-valet activity --cid <cid>
+valet activity [--cid <cid>]
+```
+
+Show configuration:
+```bash
+valet config
 ```
 
 ## Configuration
