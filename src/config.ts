@@ -13,15 +13,20 @@ export interface ValetConfig {
     renewal_interval: number; // seconds
     auto_renew: boolean;
     max_violations: number;
+    current_cid?: string;
   };
   agent: {
     private_key_path: string;
     agent_id?: string;
   };
+  principal: {
+    private_key_path: string;
+  };
   activity: {
     enabled: boolean;
     flush_interval: number; // seconds
     storage_key: string;
+    cids: string[];
   };
 }
 
@@ -35,15 +40,20 @@ const DEFAULT_CONFIG: ValetConfig = {
     ipns_key: 'valet-delegations',
     renewal_interval: 86400, // 24 hours
     auto_renew: true,
-    max_violations: 5
+    max_violations: 5,
+    current_cid: undefined
   },
   agent: {
     private_key_path: join(homedir(), '.valet', 'agent-key.pem')
   },
+  principal: {
+    private_key_path: join(homedir(), '.valet', 'principal-key.pem')
+  },
   activity: {
     enabled: true,
     flush_interval: 300, // 5 minutes
-    storage_key: 'valet-activity'
+    storage_key: 'valet-activity',
+    cids: []
   }
 };
 
@@ -110,6 +120,7 @@ export class ConfigManager {
       ipfs: { ...this.config.ipfs, ...updates.ipfs },
       delegation: { ...this.config.delegation, ...updates.delegation },
       agent: { ...this.config.agent, ...updates.agent },
+      principal: { ...this.config.principal, ...updates.principal },
       activity: { ...this.config.activity, ...updates.activity }
     };
     this.save(this.config);

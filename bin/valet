@@ -1,12 +1,20 @@
 #!/usr/bin/env node
 
 const { Command } = require('commander');
-const { IPFSManager, DelegationManager, RequestSigner, ConfigManager, ActivityTracker, ActivityReporter } = require('../dist/index.js');
-const { readFileSync, writeFileSync, existsSync } = require('fs');
-const { join } = require('path');
-const { homedir } = require('os');
+const { IPFSManager, DelegationManager, ConfigManager, KeyManager, ActivityReporter } = require('../dist/index.js');
+const { existsSync } = require('fs');
 
 const program = new Command();
+const keyManager = new KeyManager();
+
+function formatTimeRemaining(expiresAt) {
+  const remaining = new Date(expiresAt).getTime() - Date.now();
+  if (remaining <= 0) return 'EXPIRED';
+
+  const hours = Math.floor(remaining / (1000 * 60 * 60));
+  const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+  return `${hours}h ${minutes}m remaining`;
+}
 
 program
   .name('valet')
@@ -23,25 +31,54 @@ program
 
       console.log('VALET Status:');
       console.log('─────────────');
-      
-      // Check IPFS daemon
-      console.log('✓ IPFS daemon: running'); // TODO: Actually check
-      
+
       // Check agent key
       if (existsSync(cfg.agent.private_key_path)) {
+        const agentKey = await keyManager.load(cfg.agent.private_key_path);
+        const agentId = keyManager.agentIdFromPublicKey(agentKey.publicKey);
         console.log(`✓ Agent key: ${cfg.agent.private_key_path}`);
-        if (cfg.agent.agent_id) {
-          console.log(`  Agent ID: ${cfg.agent.agent_id}`);
-        }
+        console.log(`  Agent ID: ${agentId}`);
       } else {
-        console.log('✗ Agent key: not found');
+        console.log('✗ Agent key: not found (run valet create-delegation to generate)');
       }
-      
+
+      // Check principal key
+      if (existsSync(cfg.principal.private_key_path)) {
+        const principalKey = await keyManager.load(cfg.principal.private_key_path);
+        const principalId = keyManager.principalIdFromPublicKey(principalKey.publicKey);
+        console.log(`✓ Principal key: ${cfg.principal.private_key_path}`);
+        console.log(`  Principal ID: ${principalId}`);
+      } else {
+        console.log('✗ Principal key: not found (run valet create-delegation to generate)');
+      }
+
       // Check active delegation
-      // TODO: Fetch from IPFS and display
-      console.log('✓ Delegation: QmExample... (expires in 23h 45m)');
-      console.log('✓ Violations: 0');
-      
+      if (cfg.delegation.current_cid) {
+        const ipfs = new IPFSManager();
+        await ipfs.init();
+
+        try {
+          const delegation = await ipfs.fetchDelegation(cfg.delegation.current_cid);
+          const expired = new Date() >= new Date(delegation.expires_at);
+
+          if (expired) {
+            console.log(`✗ Delegation: ${cfg.delegation.current_cid} (EXPIRED)`);
+          } else {
+            console.log(`✓ Delegation: ${cfg.delegation.current_cid} (${formatTimeRemaining(delegation.expires_at)})`);
+          }
+        } catch (err) {
+          console.log(`✗ Delegation: ${cfg.delegation.current_cid} (could not fetch)`);
+        }
+
+        await ipfs.stop();
+      } else {
+        console.log('✗ Delegation: none active');
+      }
+
+      // Activity records count
+      const activityCount = cfg.activity.cids ? cfg.activity.cids.length : 0;
+      console.log(`  Activity records: ${activityCount} flushed`);
+
     } catch (error) {
       console.error('Error:', error.message);
       process.exit(1);
@@ -54,21 +91,46 @@ program
   .option('-d, --duration <hours>', 'Delegation duration in hours', '24')
   .action(async (options) => {
     try {
-      console.log('Creating delegation...');
-      
       const config = new ConfigManager();
       const cfg = config.get();
-      
-      // Load or generate principal key
-      // TODO: Implement key management
-      
+      const duration = parseFloat(options.duration);
+
+      console.log('Creating delegation...');
+
+      // Load or generate keys
+      const agentKey = await keyManager.loadOrGenerate(cfg.agent.private_key_path);
+      const principalKey = await keyManager.loadOrGenerate(cfg.principal.private_key_path);
+
+      const agentId = keyManager.agentIdFromPublicKey(agentKey.publicKey);
+      const principalId = keyManager.principalIdFromPublicKey(principalKey.publicKey);
+
       // Initialize IPFS
       const ipfs = new IPFSManager();
       await ipfs.init();
-      
+
+      // Create delegation
+      const delegationManager = new DelegationManager(ipfs, principalKey.privateKey);
+      const cid = await delegationManager.createDelegation(agentKey.publicKey, duration);
+
+      // Fetch back to display details
+      const delegation = await ipfs.fetchDelegation(cid);
+
+      // Update config with current state
+      config.update({
+        agent: { ...cfg.agent, agent_id: agentId },
+        delegation: { ...cfg.delegation, current_cid: cid },
+        activity: { ...cfg.activity, cids: [] }
+      });
+
+      console.log('');
       console.log('✓ Delegation created');
-      console.log('  CID: QmExample...');
-      
+      console.log(`  CID:          ${cid}`);
+      console.log(`  Agent ID:     ${delegation.agent_id}`);
+      console.log(`  Principal ID: ${delegation.principal_id}`);
+      console.log(`  Issued:       ${delegation.issued_at}`);
+      console.log(`  Expires:      ${delegation.expires_at}`);
+      console.log(`  Duration:     ${duration}h`);
+
       await ipfs.stop();
     } catch (error) {
       console.error('Error:', error.message);
@@ -81,13 +143,30 @@ program
   .description('Show current delegation details')
   .action(async () => {
     try {
+      const config = new ConfigManager();
+      const cfg = config.get();
+
+      if (!cfg.delegation.current_cid) {
+        console.log('No active delegation. Run valet create-delegation first.');
+        process.exit(1);
+      }
+
+      const ipfs = new IPFSManager();
+      await ipfs.init();
+
+      const delegation = await ipfs.fetchDelegation(cfg.delegation.current_cid);
+      const expired = new Date() >= new Date(delegation.expires_at);
+
       console.log('Current Delegation:');
       console.log('──────────────────');
-      console.log('Agent ID: agent:ed25519:...');
-      console.log('Principal ID: ed25519:...');
-      console.log('Issued: 2026-02-14T08:00:00Z');
-      console.log('Expires: 2026-02-15T08:00:00Z');
-      console.log('CID: QmExample...');
+      console.log(`Agent ID:     ${delegation.agent_id}`);
+      console.log(`Principal ID: ${delegation.principal_id}`);
+      console.log(`Issued:       ${delegation.issued_at}`);
+      console.log(`Expires:      ${delegation.expires_at}`);
+      console.log(`CID:          ${cfg.delegation.current_cid}`);
+      console.log(`Status:       ${expired ? 'EXPIRED' : formatTimeRemaining(delegation.expires_at)}`);
+
+      await ipfs.stop();
     } catch (error) {
       console.error('Error:', error.message);
       process.exit(1);
@@ -99,9 +178,24 @@ program
   .description('Revoke current delegation')
   .action(async () => {
     try {
-      console.log('Revoking delegation...');
-      // TODO: Implement revocation
-      console.log('✓ Delegation revoked');
+      const config = new ConfigManager();
+      const cfg = config.get();
+
+      if (!cfg.delegation.current_cid) {
+        console.log('No active delegation to revoke.');
+        process.exit(1);
+      }
+
+      const previousCid = cfg.delegation.current_cid;
+
+      config.update({
+        delegation: { ...cfg.delegation, current_cid: undefined },
+        activity: { ...cfg.activity, cids: [] }
+      });
+
+      console.log(`✓ Delegation revoked: ${previousCid}`);
+      console.log('  Note: The delegation record still exists on IPFS but the agent will no longer use it.');
+
     } catch (error) {
       console.error('Error:', error.message);
       process.exit(1);
@@ -134,12 +228,31 @@ program
       await ipfs.init();
 
       if (options.cid) {
+        // View specific activity record
         const records = await ipfs.fetchJSON(options.cid);
         const reporter = new ActivityReporter(records);
         console.log(reporter.format());
+      } else if (cfg.activity.cids && cfg.activity.cids.length > 0) {
+        // Merge all activity records for current period
+        let allRecords = [];
+        for (const cid of cfg.activity.cids) {
+          try {
+            const records = await ipfs.fetchJSON(cid);
+            allRecords = allRecords.concat(records);
+          } catch (err) {
+            console.error(`Warning: Could not fetch activity CID ${cid}: ${err.message}`);
+          }
+        }
+
+        if (allRecords.length > 0) {
+          const reporter = new ActivityReporter(allRecords);
+          console.log(reporter.format());
+        } else {
+          console.log('No activity records found.');
+        }
       } else {
-        console.log('No activity CID specified. Use --cid <cid> to view a specific record.');
-        console.log('Tip: Activity CIDs are returned when flushing the tracker.');
+        console.log('No activity records for current delegation period.');
+        console.log('Tip: Use --cid <cid> to view a specific activity record.');
       }
 
       await ipfs.stop();
@@ -158,35 +271,71 @@ program
     try {
       const config = new ConfigManager();
       const cfg = config.get();
+      const duration = parseFloat(options.duration);
 
       const ipfs = new IPFSManager();
       await ipfs.init();
 
-      // Show activity summary if CID provided
-      if (options.activityCid) {
-        const records = await ipfs.fetchJSON(options.activityCid);
-        const reporter = new ActivityReporter(records);
+      // Collect activity records
+      let allRecords = [];
 
-        console.log('Delegation Renewal Review');
-        console.log('========================');
-        console.log('');
+      if (options.activityCid) {
+        allRecords = await ipfs.fetchJSON(options.activityCid);
+      } else if (cfg.activity.cids && cfg.activity.cids.length > 0) {
+        for (const cid of cfg.activity.cids) {
+          try {
+            const records = await ipfs.fetchJSON(cid);
+            allRecords = allRecords.concat(records);
+          } catch (err) {
+            console.error(`Warning: Could not fetch activity CID ${cid}: ${err.message}`);
+          }
+        }
+      }
+
+      console.log('Delegation Renewal Review');
+      console.log('========================');
+      console.log('');
+
+      if (allRecords.length > 0) {
+        const reporter = new ActivityReporter(allRecords);
         console.log(reporter.format());
         console.log('');
 
-        // Check source breakdown
         const summary = reporter.summary();
         if (summary.by_source.service === 0) {
           console.log('Note: All records are agent-reported (not independently verified by services).');
           console.log('');
         }
       } else {
-        console.log('No activity record provided. Proceeding without activity review.');
+        console.log('No activity records for this period.');
         console.log('');
       }
 
-      // Prompt for renewal (in a real implementation this would be interactive)
-      console.log('To approve renewal, run:');
-      console.log(`  valet create-delegation -d ${options.duration}`);
+      // Create new delegation
+      if (!existsSync(cfg.agent.private_key_path) || !existsSync(cfg.principal.private_key_path)) {
+        console.log('Keys not found. Run valet create-delegation first.');
+        await ipfs.stop();
+        process.exit(1);
+      }
+
+      const agentKey = await keyManager.load(cfg.agent.private_key_path);
+      const principalKey = await keyManager.load(cfg.principal.private_key_path);
+
+      console.log(`Creating new ${duration}h delegation...`);
+
+      const delegationManager = new DelegationManager(ipfs, principalKey.privateKey);
+      const cid = await delegationManager.createDelegation(agentKey.publicKey, duration);
+      const delegation = await ipfs.fetchDelegation(cid);
+
+      config.update({
+        delegation: { ...cfg.delegation, current_cid: cid },
+        activity: { ...cfg.activity, cids: [] }
+      });
+
+      console.log('');
+      console.log('✓ Delegation renewed');
+      console.log(`  CID:     ${cid}`);
+      console.log(`  Expires: ${delegation.expires_at}`);
 
       await ipfs.stop();
     } catch (error) {
