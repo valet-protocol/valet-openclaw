@@ -18,6 +18,11 @@ export interface ValetConfig {
     private_key_path: string;
     agent_id?: string;
   };
+  activity: {
+    enabled: boolean;
+    flush_interval: number; // seconds
+    storage_key: string;
+  };
 }
 
 const DEFAULT_CONFIG: ValetConfig = {
@@ -34,6 +39,11 @@ const DEFAULT_CONFIG: ValetConfig = {
   },
   agent: {
     private_key_path: join(homedir(), '.valet', 'agent-key.pem')
+  },
+  activity: {
+    enabled: true,
+    flush_interval: 300, // 5 minutes
+    storage_key: 'valet-activity'
   }
 };
 
@@ -99,7 +109,8 @@ export class ConfigManager {
       ...updates,
       ipfs: { ...this.config.ipfs, ...updates.ipfs },
       delegation: { ...this.config.delegation, ...updates.delegation },
-      agent: { ...this.config.agent, ...updates.agent }
+      agent: { ...this.config.agent, ...updates.agent },
+      activity: { ...this.config.activity, ...updates.activity }
     };
     this.save(this.config);
   }

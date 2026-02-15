@@ -1,10 +1,11 @@
 import * as ed25519 from '@noble/ed25519';
 import { base58btc } from 'multiformats/bases/base58';
-import { createHash } from 'crypto';
+import type { Delegation } from './ipfs-manager.js';
 
 export interface SignedRequest {
   headers: {
-    'VALET-Delegation': string;
+    'VALET-Authorization': string;
+    'VALET-Agent': string;
     'Signature-Input': string;
     'Signature': string;
   };
@@ -18,17 +19,21 @@ export class RequestSigner {
   async signRequest(
     method: string,
     path: string,
-    delegationCID: string,
+    delegation: Delegation,
+    recordUrl: string,
     body?: string
   ): Promise<SignedRequest> {
     const created = Math.floor(Date.now() / 1000);
     const agentId = await this.getAgentId();
 
+    // Base64-encode the delegation JSON per spec Section 5.1
+    const valetAuthorization = Buffer.from(JSON.stringify(delegation)).toString('base64');
+
     // Construct signature base per RFC 9421
     const signatureBase = this.constructSignatureBase(
       method,
       path,
-      delegationCID,
+      valetAuthorization,
       created,
       agentId
     );
@@ -39,18 +44,20 @@ export class RequestSigner {
       this.agentPrivateKey
     );
 
-    // Format headers per RFC 9421
-    const signatureInput = 
-      `valet=("@method" "@path" "valet-delegation");` +
+    // Format headers per RFC 9421 and VALET spec
+    const signatureInput =
+      `valet=("@method" "@path" "valet-authorization");` +
       `created=${created};` +
       `keyid="${agentId}";` +
-      `alg="ed25519"`;
+      `alg="ed25519";` +
+      `v="1.0"`;
 
     const signatureValue = `valet=:${this.toBase64(signature)}:`;
 
     return {
       headers: {
-        'VALET-Delegation': delegationCID,
+        'VALET-Authorization': valetAuthorization,
+        'VALET-Agent': `record=${recordUrl}`,
         'Signature-Input': signatureInput,
         'Signature': signatureValue
       }
@@ -60,7 +67,7 @@ export class RequestSigner {
   async verifyRequest(
     method: string,
     path: string,
-    delegationCID: string,
+    valetAuthorization: string,
     signatureInput: string,
     signatureValue: string
   ): Promise<boolean> {
@@ -73,7 +80,7 @@ export class RequestSigner {
       const signatureBase = this.constructSignatureBase(
         method,
         path,
-        delegationCID,
+        valetAuthorization,
         params.created,
         params.keyid
       );
@@ -83,7 +90,7 @@ export class RequestSigner {
       if (!sigMatch) return false;
 
       const signature = this.fromBase64(sigMatch[1]);
-      
+
       // Get public key from keyid
       const publicKey = this.extractPublicKeyFromAgentId(params.keyid);
 
@@ -102,7 +109,7 @@ export class RequestSigner {
   private constructSignatureBase(
     method: string,
     path: string,
-    delegationCID: string,
+    valetAuthorization: string,
     created: number,
     agentId: string
   ): string {
@@ -110,9 +117,9 @@ export class RequestSigner {
     return [
       `"@method": ${method}`,
       `"@path": ${path}`,
-      `"valet-delegation": ${delegationCID}`,
-      `"@signature-params": ("@method" "@path" "valet-delegation");` +
-      `created=${created};keyid="${agentId}";alg="ed25519"`
+      `"valet-authorization": ${valetAuthorization}`,
+      `"@signature-params": ("@method" "@path" "valet-authorization");` +
+      `created=${created};keyid="${agentId}";alg="ed25519";v="1.0"`
     ].join('\n');
   }
 

@@ -105,18 +105,55 @@ When your agent makes a request, it includes VALET headers:
 ```http
 POST /api/send-email HTTP/1.1
 Host: mail.example.com
-VALET-Delegation: QmYwAPJzv5CZsnA636s8Bv...
-Signature-Input: valet=("@method" "@path" "valet-delegation");created=1708077600;keyid="agent:ed25519:5FHn...";alg="ed25519"
+VALET-Authorization: eyJhZ2VudF9pZCI6ImFnZW50OmVkMjU1MTk6NUZIbmVXNDZ4R1hnczVt...
+VALET-Agent: record=https://ipfs.io/ipfs/QmYwAPJzv5CZsnA636s8Bv...
+Signature-Input: valet=("@method" "@path" "valet-authorization");created=1708077600;keyid="agent:ed25519:5FHn...";alg="ed25519";v="1.0"
 Signature: valet=:MEUCIQDxK7VQX8...:
 ```
 
-### 4. 24-Hour Renewal
+### 4. Activity Tracking
+
+The agent records every HTTP request and its response status code. Each record includes a `source` field indicating whether it was reported by the agent itself (`"agent"`) or independently verified by a service (`"service"`).
+
+### 5. 24-Hour Renewal
 
 Every 24 hours:
-1. Agent fetches its activity record from IPFS
-2. Shows you what it's done and any violations
+1. Agent flushes its activity records to IPFS
+2. You review the activity summary before reauthorizing
 3. You approve or deny renewal
 4. New delegation is created and published to IPFS
+
+Review activity before renewing:
+```bash
+valet renew --activity-cid QmYwAPJzv5...
+```
+
+Or view activity on its own:
+```bash
+valet activity --cid QmYwAPJzv5...
+```
+
+Example output:
+```
+Activity Summary (2026-02-14T08:00:00Z - 2026-02-15T08:00:00Z):
+
+Total Requests: 1,523
+Success Rate: 98%
+
+By Service:
+  - gmail.com: 847 requests (0 errors)
+  - calendar.google.com: 676 requests (31 errors)
+
+By Status:
+  - 2xx (Success): 1,489
+  - 4xx (Client Error): 3
+    - 429: 2
+    - 403: 1
+  - 5xx (Server Error): 31
+    - 500: 31
+
+Note: All records are agent-reported (not independently verified by services).
+```
 
 ## Configuration
 
@@ -137,6 +174,11 @@ Configuration is stored in `~/.valet/config.json`:
   },
   "agent": {
     "private_key_path": "/home/user/.valet/agent-key.pem"
+  },
+  "activity": {
+    "enabled": true,
+    "flush_interval": 300,
+    "storage_key": "valet-activity"
   }
 }
 ```

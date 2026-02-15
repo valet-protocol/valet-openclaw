@@ -39,10 +39,8 @@ export class DelegationManager {
   async verifyDelegation(delegation: Delegation, principalPublicKey: Uint8Array): Promise<boolean> {
     try {
       // Reconstruct the message that was signed
-      const message = this.constructSignatureMessage({
-        ...delegation,
-        delegation_signature: '' // Exclude signature from signed message
-      });
+      const { delegation_signature: _, ...delegationFields } = delegation;
+      const message = this.constructSignatureMessage(delegationFields);
 
       // Decode the signature
       const signature = this.fromBase64(delegation.delegation_signature);

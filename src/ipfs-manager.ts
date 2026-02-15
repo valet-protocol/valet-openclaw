@@ -49,6 +49,34 @@ export class IPFSManager {
     return JSON.parse(content) as Delegation;
   }
 
+  async storeJSON(data: unknown): Promise<string> {
+    if (!this.fs) {
+      throw new Error('IPFS not initialized. Call init() first.');
+    }
+
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(JSON.stringify(data, null, 2));
+    const cid = await this.fs.addBytes(bytes);
+
+    return cid.toString();
+  }
+
+  async fetchJSON<T = unknown>(cidString: string): Promise<T> {
+    if (!this.fs) {
+      throw new Error('IPFS not initialized. Call init() first.');
+    }
+
+    const cid = CID.parse(cidString);
+    const decoder = new TextDecoder();
+    let content = '';
+
+    for await (const chunk of this.fs.cat(cid)) {
+      content += decoder.decode(chunk, { stream: true });
+    }
+
+    return JSON.parse(content) as T;
+  }
+
   async updateIPNS(cidString: string, keyName: string = 'valet-delegations'): Promise<string> {
     if (!this.helia) {
       throw new Error('IPFS not initialized. Call init() first.');

@@ -56,8 +56,9 @@ The skill automatically:
 Once installed, all agent HTTP requests automatically include VALET headers:
 
 ```http
-VALET-Delegation: QmYwAPJzv5CZsnA636s8Bv...
-Signature-Input: valet=("@method" "@path" "valet-delegation");created=1708077600;keyid="agent:ed25519:...";alg="ed25519"
+VALET-Authorization: eyJhZ2VudF9pZCI6ImFnZW50OmVkMjU1MTk6NUZIbmVXNDZ4R1hnczVt...
+VALET-Agent: record=https://ipfs.io/ipfs/QmYwAPJzv5CZsnA636s8Bv...
+Signature-Input: valet=("@method" "@path" "valet-authorization");created=1708077600;keyid="agent:ed25519:...";alg="ed25519";v="1.0"
 Signature: valet=:base64_signature:
 ```
 
@@ -81,6 +82,16 @@ valet show
 Revoke delegation:
 ```bash
 valet revoke
+```
+
+Review activity before renewing delegation:
+```bash
+valet renew --activity-cid <cid>
+```
+
+View activity summary on its own:
+```bash
+valet activity --cid <cid>
 ```
 
 ## Configuration
@@ -107,7 +118,7 @@ Edit `~/.valet/config.json`:
 2. VALET skill intercepts
 3. Fetches current delegation CID
 4. Signs request per RFC 9421
-5. Adds VALET-Delegation, Signature-Input, Signature headers
+5. Adds VALET-Authorization, VALET-Agent, Signature-Input, Signature headers
 6. Request proceeds to service
 
 ### Service Verification
@@ -121,11 +132,12 @@ Services verify:
 ### Renewal Flow
 
 Every 24 hours:
-1. Agent fetches activity record from IPFS
-2. Presents to you: requests made, violations reported
-3. You approve or deny renewal
-4. If approved: new delegation created and published to IPFS
-5. If denied: agent stops operating
+1. Agent flushes buffered activity records to IPFS
+2. Presents activity summary: requests by service, status codes, error rates
+3. Records are labeled by source (`agent` or `service`) so you can see which are independently verified
+4. You approve or deny renewal
+5. If approved: new delegation created and published to IPFS
+6. If denied: agent stops operating
 
 ## Security
 
