@@ -1,6 +1,6 @@
 # VALET for OpenClaw
 
-OpenClaw skill for the [VALET Protocol](https://github.com/valet-protocol/valet) - enabling AI agents to prove delegated authority when accessing services.
+OpenClaw skill for the [VALET Protocol](https://github.com/valet-protocol/spec) - enabling AI agents to prove delegated authority when accessing services.
 
 ## What is VALET?
 
