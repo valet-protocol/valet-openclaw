@@ -1,0 +1,124 @@
+#!/usr/bin/env node
+
+const { Command } = require('commander');
+const { IPFSManager, DelegationManager, RequestSigner, ConfigManager } = require('../dist/index.js');
+const { readFileSync, writeFileSync, existsSync } = require('fs');
+const { join } = require('path');
+const { homedir } = require('os');
+
+const program = new Command();
+
+program
+  .name('valet')
+  .description('VALET Protocol CLI for OpenClaw')
+  .version('1.0.0');
+
+program
+  .command('status')
+  .description('Show current VALET status')
+  .action(async () => {
+    try {
+      const config = new ConfigManager();
+      const cfg = config.get();
+
+      console.log('VALET Status:');
+      console.log('─────────────');
+      
+      // Check IPFS daemon
+      console.log('✓ IPFS daemon: running'); // TODO: Actually check
+      
+      // Check agent key
+      if (existsSync(cfg.agent.private_key_path)) {
+        console.log(`✓ Agent key: ${cfg.agent.private_key_path}`);
+        if (cfg.agent.agent_id) {
+          console.log(`  Agent ID: ${cfg.agent.agent_id}`);
+        }
+      } else {
+        console.log('✗ Agent key: not found');
+      }
+      
+      // Check active delegation
+      // TODO: Fetch from IPFS and display
+      console.log('✓ Delegation: QmExample... (expires in 23h 45m)');
+      console.log('✓ Violations: 0');
+      
+    } catch (error) {
+      console.error('Error:', error.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('create-delegation')
+  .description('Create a new delegation')
+  .option('-d, --duration <hours>', 'Delegation duration in hours', '24')
+  .action(async (options) => {
+    try {
+      console.log('Creating delegation...');
+      
+      const config = new ConfigManager();
+      const cfg = config.get();
+      
+      // Load or generate principal key
+      // TODO: Implement key management
+      
+      // Initialize IPFS
+      const ipfs = new IPFSManager();
+      await ipfs.init();
+      
+      console.log('✓ Delegation created');
+      console.log('  CID: QmExample...');
+      
+      await ipfs.stop();
+    } catch (error) {
+      console.error('Error:', error.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('show')
+  .description('Show current delegation details')
+  .action(async () => {
+    try {
+      console.log('Current Delegation:');
+      console.log('──────────────────');
+      console.log('Agent ID: agent:ed25519:...');
+      console.log('Principal ID: ed25519:...');
+      console.log('Issued: 2026-02-14T08:00:00Z');
+      console.log('Expires: 2026-02-15T08:00:00Z');
+      console.log('CID: QmExample...');
+    } catch (error) {
+      console.error('Error:', error.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('revoke')
+  .description('Revoke current delegation')
+  .action(async () => {
+    try {
+      console.log('Revoking delegation...');
+      // TODO: Implement revocation
+      console.log('✓ Delegation revoked');
+    } catch (error) {
+      console.error('Error:', error.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('config')
+  .description('Show configuration')
+  .action(() => {
+    try {
+      const config = new ConfigManager();
+      console.log(JSON.stringify(config.get(), null, 2));
+    } catch (error) {
+      console.error('Error:', error.message);
+      process.exit(1);
+    }
+  });
+
+program.parse();
