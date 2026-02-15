@@ -4,7 +4,7 @@ OpenClaw skill for the [VALET Protocol](https://github.com/valet-protocol/spec) 
 
 ## What is VALET?
 
-VALET (Verified Agent Legitimacy and Endorsement Token) is a lightweight protocol that allows AI agents to cryptographically prove they're authorized to act on behalf of a human principal. It's built on RFC 9421 (HTTP Message Signatures) and uses IPFS for decentralized delegation storage.
+VALET (Verifiable Agent Limited-Expiry Token) is a lightweight protocol that allows AI agents to cryptographically prove they're authorized to act on behalf of a human principal. It's built on RFC 9421 (HTTP Message Signatures) and uses IPFS for decentralized delegation storage.
 
 ## What This Skill Does
 
